@@ -1,0 +1,45 @@
+{
+  "name": "ionic-version-manager",
+  "version": "1.0.0",
+  "description": "Sistema automatizado de control de versiones para proyectos Ionic + Angular + Capacitor + Trapeze",
+  "main": "scripts/update-version.js",
+  "type": "module",
+  "scripts": {
+    "version:info": "node scripts/update-version.js info",
+    "version:patch": "node scripts/update-version.js patch",
+    "version:minor": "node scripts/update-version.js minor",
+    "version:major": "node scripts/update-version.js major",
+    "version:hotfix": "node scripts/update-version.js hotfix",
+    "version:show": "node scripts/update-version.js show",
+    "test": "node test/test-version-manager.js",
+    "install:project": "node scripts/install-in-project.js"
+  },
+  "keywords": [
+    "ionic",
+    "angular",
+    "capacitor",
+    "trapeze",
+    "version-management",
+    "mobile-development",
+    "automation"
+  ],
+  "author": "Developed for PSDMobile project",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/user/ionic-version-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/user/ionic-version-manager/issues"
+  },
+  "homepage": "https://github.com/user/ionic-version-manager#readme",
+  "devDependencies": {
+    "fs-extra": "^11.0.0"
+  },
+  "dependencies": {
+    "yaml": "^2.3.0"
+  }
+}
