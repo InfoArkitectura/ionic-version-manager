@@ -4,11 +4,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Demo project dependencies (mantener estructura pero no node_modules)
-demo-project/node_modules/
-demo-project/www/
-demo-project/.angular/
-demo-project/dist/
+# Demo project (ejemplo local, no incluir en repo)
+demo-project/
 
 # Build outputs
 dist/
