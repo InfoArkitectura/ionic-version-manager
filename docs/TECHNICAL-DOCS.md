@@ -1,138 +1,97 @@
-# 📖 Documentación Técnica - Ionic Version Manager
+# Documentación técnica
 
-## 🔧 Arquitectura del Sistema
+## Arquitectura
 
-### Componentes Principales:
+- `scripts/cli.js`: motor ESM y punto de entrada `ionic-version`.
+- `scripts/update-version.js`: wrapper compatible con instalaciones v1.
+- `scripts/install-in-project.js`: alias obsoleto de `ionic-version init`.
+- `templates/`: configuraciones iniciales de Trapeze y baselines.
+- `test/test-version-manager.js`: pruebas unitarias e integración con proyectos temporales.
 
-1. **`scripts/update-version.js`** - Motor principal del sistema
-2. **`templates/trapeze.config.yaml`** - Template base para configuración
-3. **`scripts/install-in-project.js`** - Instalador automático
-4. **`test/test-version-manager.js`** - Suite de tests
+El paquete se consume como dependencia de desarrollo. La lógica permanece en `node_modules`; no se copia a cada app.
 
-## 📐 Algoritmo de Versionado
+## Invariantes
 
-### Lógica del VersionCode:
-```javascript
-function generateVersionCode(version) {
-  const parts = version.split('.');
-  let code = '';
-  
-  for (const part of parts) {
-    // Cada parte del código tiene un dígito más que la versión
-    const paddedValue = part + '0';
-    code += paddedValue;
-  }
-  
-  return parseInt(code);
-}
+Una app está lista para preparar una actualización cuando:
+
+1. `package.json.version`, Android `versionName` e iOS `version` coinciden.
+2. `versionCode` y `buildNumber` coinciden y son enteros positivos.
+3. Cada componente SemVer está entre `0` y `9`.
+4. Los códigos son superiores a los últimos valores publicados, cuando se conocen.
+5. Una release normal usa el código base exacto derivado de la versión.
+
+## Algoritmo
+
+```text
+baseCode = major * 100000000
+         + minor *    100000
+         + patch *       100
+
+storeCode = baseCode + build
 ```
 
-### Ejemplos de Transformación:
-| Versión | Cálculo | Código | Hotfixes Disponibles |
-|---------|---------|--------|---------------------|
-| 1.0.0 | 1→10, 0→00, 0→00 | 100000 | 100001-100009 |
-| 2.1.5 | 2→20, 1→10, 5→50 | 201050 | 201051-201059 |
-| 10.15.25 | 10→100, 15→150, 25→250 | 100150250 | 100150251-100150259 |
+Rangos:
 
-## 🔄 Flujo de Actualización
+- `major`: `0-9`
+- `minor`: `0-9`
+- `patch`: `0-9`
+- `build`: `0-99`
 
-1. **Lectura**: package.json + trapeze.config.yaml
-2. **Incremento**: Versión según tipo (patch/minor/major)
-3. **Cálculo**: Nuevo versionCode usando algoritmo +1
-4. **Escritura**: Actualización sincronizada de archivos
-5. **Confirmación**: Mensaje con nueva información
+Ejemplos:
 
-## 🎯 Casos de Uso Avanzados
+| Versión/build | Código |
+| --- | ---: |
+| `1.0.0+0` | `100000000` |
+| `2.1.5+0` | `200100500` |
+| `2.1.5+1` | `200100501` |
+| `2.1.5+99` | `200100599` |
+| `2.1.6+0` | `200100600` |
 
-### Hotfix de Emergencia:
-```bash
-# Situación: 2.1.5 (201050) falla en Google Play
-# Solución: Editar manualmente trapeze.config.yaml
-versionName: 2.1.5  # Mantener igual
-versionCode: 201051 # Incrementar solo el código
-```
+El máximo generado (`9.9.9+99 = 900900999`) queda por debajo del límite de Google Play (`2100000000`).
 
-### Migración de Proyecto Existente:
-```bash
-# 1. Backup actual
-cp package.json package.json.backup
-cp trapeze.config.yaml trapeze.config.yaml.backup
+## Baselines publicados
 
-# 2. Instalar sistema
-node ionic-version-manager/scripts/install-in-project.js
+`ionic-version.config.yaml` guarda el último estado conocido de las tiendas:
 
-# 3. Verificar resultado
-npm run version:info
-```
-
-## 🧪 Testing y Validación
-
-### Tests Automáticos:
-- Funciones de incremento de versión
-- Algoritmo de generación de código
-- Estructura de archivos
-- Validación de templates
-
-### Comandos de Validación:
-```bash
-npm test                    # Tests completos
-npm run version:info        # Estado actual
-node scripts/update-version.js show  # Información detallada
-```
-
-## 🔧 Configuración Avanzada
-
-### Personalización de Templates:
 ```yaml
-# templates/trapeze.config.yaml
-platforms:
-  android:
-    versionName: 1.0.0
-    versionCode: 100000
-    # Añadir configuraciones específicas aquí
-    
-  ios:
-    version: 1.0.0
-    buildNumber: 100000
-    # Añadir configuraciones específicas aquí
+android:
+  lastPublishedCode: 200100599
+ios:
+  lastPublishedBuild: 200100599
 ```
 
-### Scripts Adicionales:
-```json
-{
-  "scripts": {
-    "version:check": "npm run version:info",
-    "version:bump": "npm run version:patch && npm run trapeze:both",
-    "release:prepare": "npm run version:minor && npm run trapeze:both && npx cap sync"
-  }
-}
+La CLI no consulta cuentas ni APIs externas. El equipo actualiza estos valores después de una publicación aceptada.
+
+`check` exige `local > baseline`. `bump` incluye ambos baselines al decidir si el código correlacionado es válido. Si no lo supera, falla en lugar de generar un código sin relación con SemVer.
+
+## Escritura de archivos
+
+- `package.json` se procesa como JSON.
+- `trapeze.config.yaml` se procesa con `yaml`, conservando comentarios siempre que sea posible.
+- Las escrituras utilizan un archivo temporal y un rename atómico.
+- Si falla la escritura conjunta de versión, se restauran los contenidos originales.
+- `init` no reemplaza archivos existentes ni scripts npm ya definidos.
+
+## Contrato CLI
+
+```text
+ionic-version init
+ionic-version info
+ionic-version check [--android-baseline N] [--ios-baseline N]
+ionic-version bump <patch|minor|major|hotfix>
 ```
 
-## 🚨 Solución de Problemas
+Todos los comandos aceptan `--cwd RUTA` para pruebas o automatización desde otro directorio.
 
-### Error: "Cannot find module"
-- Verificar que Node.js >= 16.0.0
-- Ejecutar desde directorio correcto
+Los aliases `patch`, `minor`, `major`, `hotfix`, `show` e `info` se mantienen para facilitar la migración desde v1.
 
-### Error: "No se encontró trapeze.config.yaml"
-- Instalar Trapeze: `npm install -D @trapezedev/configure`
-- Copiar template desde `templates/trapeze.config.yaml`
+## Responsabilidades fuera de alcance
 
-### VersionCode muy grande
-- Límite teórico: ~9 dígitos para versiones normales
-- Para versiones extremas (100.100.100 → 1001001000), verificar límites de plataforma
+El gestor no ejecuta automáticamente:
 
-## 📊 Límites del Sistema
+- Trapeze o `cap sync`.
+- Builds Android/iOS.
+- Firma de AAB, APK o IPA.
+- Publicación en Google Play o App Store Connect.
 
-### Rangos Soportados:
-- **Major**: 0-999 (ilimitado prácticamente)
-- **Minor**: 0-999 (ilimitado prácticamente)  
-- **Patch**: 0-999 (ilimitado prácticamente)
-- **Hotfixes**: 10 por versión (0-9 al final)
-
-### Límites de Plataforma:
-- **Android**: versionCode máximo ~2.1 mil millones
-- **iOS**: buildNumber máximo ~2.1 mil millones
-
----
-*Documentación técnica completa para ionic-version-manager v1.0.0*
+Estas operaciones pertenecen a cada app consumidora porque sus rutas, configuraciones y credenciales son específicas.

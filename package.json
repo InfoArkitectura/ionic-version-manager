@@ -1,18 +1,22 @@
 {
   "name": "ionic-version-manager",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Sistema automatizado de control de versiones para proyectos Ionic + Angular + Capacitor + Trapeze",
-  "main": "scripts/update-version.js",
+  "main": "scripts/cli.js",
   "type": "module",
+  "bin": {
+    "ionic-version": "scripts/cli.js"
+  },
+  "files": [
+    "scripts",
+    "templates",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "version:info": "node scripts/update-version.js info",
-    "version:patch": "node scripts/update-version.js patch",
-    "version:minor": "node scripts/update-version.js minor",
-    "version:major": "node scripts/update-version.js major",
-    "version:hotfix": "node scripts/update-version.js hotfix",
-    "version:show": "node scripts/update-version.js show",
     "test": "node test/test-version-manager.js",
-    "install:project": "node scripts/install-in-project.js"
+    "cli": "node scripts/cli.js"
   },
   "keywords": [
     "ionic",
@@ -26,16 +30,16 @@
   "author": "Developed for PSDMobile project",
   "license": "MIT",
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.0.0"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/user/ionic-version-manager.git"
+    "url": "git+https://github.com/InfoArkitectura/ionic-version-manager.git"
   },
   "bugs": {
-    "url": "https://github.com/user/ionic-version-manager/issues"
+    "url": "https://github.com/InfoArkitectura/ionic-version-manager/issues"
   },
-  "homepage": "https://github.com/user/ionic-version-manager#readme",
+  "homepage": "https://github.com/InfoArkitectura/ionic-version-manager#readme",
   "devDependencies": {
     "fs-extra": "^11.0.0"
   },

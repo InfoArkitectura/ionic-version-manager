@@ -1,156 +1,76 @@
-# 🚀 Guía de Inicio Rápido - Ionic Version Manager
+# Guía rápida
 
-## Instalación en Proyecto Existente
+## 1. Instalar en la app Ionic
 
-### Paso 1: Clonar el repositorio
+Desde la raíz de la app consumidora:
+
 ```bash
-git clone https://github.com/tu-usuario/ionic-version-manager.git
+npm install --save-dev github:InfoArkitectura/ionic-version-manager#master
+npx ionic-version init
 ```
 
-### Paso 2: Ir a tu proyecto Ionic
-```bash
-cd mi-proyecto-ionic
-```
+`init` conserva scripts y configuraciones existentes. Revisa los archivos creados antes de continuar.
 
-### Paso 3: Ejecutar instalador automático
-```bash
-node ../ionic-version-manager/scripts/install-in-project.js
-```
+## 2. Registrar el último build publicado
 
-## Configuración Inicial
+Edita `ionic-version.config.yaml`:
 
-### Editar trapeze.config.yaml:
 ```yaml
-platforms:
-  android:
-    versionName: 1.0.0
-    versionCode: 100000
-    # ... resto de configuración
-    
-  ios:
-    version: 1.0.0
-    buildNumber: 100000
-    # ... resto de configuración
+android:
+  lastPublishedCode: 200100599
+ios:
+  lastPublishedBuild: 200100599
 ```
 
-### Añadir scripts de Trapeze al package.json:
-```json
-{
-  "scripts": {
-    "trapeze:android": "npx trapeze run trapeze.config.yaml --android --android-project android -y",
-    "trapeze:ios": "npx trapeze run trapeze.config.yaml --ios --ios-project ios/App -y",
-    "trapeze:both": "npm run trapeze:android && npm run trapeze:ios"
-  }
-}
-```
+Usa los valores realmente aceptados por Google Play y App Store Connect. Déjalos como `null` si la app nunca se ha publicado.
 
-## Uso Diario
+## 3. Comprobar el estado
 
-### Ver versiones actuales:
 ```bash
 npm run version:info
-```
-Salida:
-```
-📱 Información de Versiones
-==========================================
-📦 Package.json: 1.0.0
-🤖 Android: 1.0.0 (versionCode: 100000)
-🍎 iOS: 1.0.0 (buildNumber: 100000)
+npm run version:check
 ```
 
-### Incrementar versión patch:
+`check` valida que la versión visible coincida entre `package.json`, Android e iOS, que ambos códigos sean enteros válidos y que superen los baselines publicados.
+
+## 4. Preparar una actualización
+
 ```bash
+# Corrección compatible
 npm run version:patch
-```
-Resultado: `1.0.0 → 1.0.1` (código: `100000 → 100010`)
 
-### Incrementar versión minor:
-```bash
+# Nueva funcionalidad compatible
 npm run version:minor
-```
-Resultado: `1.0.5 → 1.1.0` (código: `100050 → 101000`)
 
-### Incrementar versión major:
-```bash
+# Cambio incompatible
 npm run version:major
 ```
-Resultado: `1.5.3 → 2.0.0` (código: `150030 → 200000`)
 
-### Aplicar cambios a las plataformas:
+Ejemplo de correlación:
+
+```text
+2.1.5 -> 200100500
+2.1.6 -> 200100600
+2.2.0 -> 200200000
+3.0.0 -> 300000000
+```
+
+Cada componente de versión admite valores entre `0` y `9`.
+
+## 5. Preparar otro build de la misma versión
+
 ```bash
+npm run version:hotfix
+```
+
+Para `2.1.5`, los builds disponibles van de `200100501` a `200100599`. Al agotarse, incrementa la versión visible.
+
+## 6. Aplicar y sincronizar
+
+```bash
+npm run version:check
 npm run trapeze:both
 npx cap sync
 ```
 
-## Flujo Completo de Release
-
-### Desarrollo normal (bugfix):
-```bash
-npm run version:patch      # 1.0.0 → 1.0.1
-npm run trapeze:both       # Aplicar a Android/iOS
-npx cap sync              # Sincronizar Capacitor
-npm run build:prod        # Build de producción
-```
-
-### Nueva funcionalidad:
-```bash
-npm run version:minor      # 1.0.5 → 1.1.0
-npm run trapeze:both       # Aplicar a Android/iOS
-npx cap sync              # Sincronizar Capacitor
-npm run build:prod        # Build de producción
-```
-
-### Breaking changes:
-```bash
-npm run version:major      # 1.5.3 → 2.0.0
-npm run trapeze:both       # Aplicar a Android/iOS
-npx cap sync              # Sincronizar Capacitor
-npm run build:prod        # Build de producción
-```
-
-## Casos Especiales
-
-### Hotfix de emergencia:
-Si una versión ya subida a las tiendas tiene problemas:
-
-```yaml
-# En trapeze.config.yaml
-platforms:
-  android:
-    versionName: 1.0.5    # Mantener igual
-    versionCode: 100051   # Incrementar solo el código (+1)
-  ios:
-    version: 1.0.5        # Mantener igual  
-    buildNumber: 100051   # Incrementar solo el código (+1)
-```
-
-### Verificar estado después de cambios:
-```bash
-npm run version:info
-```
-
-## Ejemplos de Códigos Generados
-
-| Versión | Android versionCode | iOS buildNumber | Hotfixes Disponibles |
-|---------|--------------------|-----------------|--------------------|
-| 1.0.0 | 100000 | 100000 | 100001-100009 |
-| 2.1.5 | 201050 | 201050 | 201051-201059 |
-| 10.15.25 | 100150250 | 100150250 | 100150251-100150259 |
-
-## Troubleshooting
-
-### Error: "No se encontró package.json"
-- Asegúrate de estar en la raíz de tu proyecto Ionic
-
-### Error: "No se encontró trapeze.config.yaml"  
-- Instala Trapeze: `npm install -D @trapezedev/configure`
-- Copia el template desde `templates/trapeze.config.yaml`
-
-### Las versiones no se sincronizan
-- Ejecuta `npm run trapeze:both` después de cambiar versiones
-- Verifica que `trapeze.config.yaml` tenga la estructura correcta
-
----
-
-¡Listo! Tu sistema de versionado automático está configurado y funcionando. 🎉
+Después genera el AAB o archivado iOS con el flujo nativo del proyecto. Ionic Version Manager no compila, firma ni publica aplicaciones.
