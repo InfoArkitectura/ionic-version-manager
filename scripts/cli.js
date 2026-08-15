@@ -65,13 +65,15 @@ export function calculateNextReleaseCode(version, currentCodes = []) {
   return code;
 }
 
-export function calculateNextHotfixCode(currentCodes = []) {
+export function calculateNextHotfixCode(version, currentCodes = []) {
   const numericCodes = currentCodes.filter(Number.isSafeInteger);
   if (numericCodes.length === 0) {
     throw new Error('No hay un versionCode/buildNumber anterior para calcular el hotfix.');
   }
 
-  const code = Math.max(...numericCodes) + 1;
+  const currentMaximum = Math.max(...numericCodes);
+  assertCodeInVersionBlock(version, currentMaximum);
+  const code = currentMaximum + 1;
   if (code % 100 === 0) {
     throw new Error('No quedan códigos de hotfix en esta versión. Incrementa patch antes de continuar.');
   }
@@ -83,6 +85,14 @@ export function calculateNextHotfixCode(currentCodes = []) {
 function assertStoreCode(code) {
   if (!Number.isSafeInteger(code) || code <= 0 || code > ANDROID_MAX_VERSION_CODE) {
     throw new Error(`Código de compilación fuera del rango de Google Play: 1-${ANDROID_MAX_VERSION_CODE}.`);
+  }
+}
+
+function assertCodeInVersionBlock(version, code) {
+  const baseCode = calculateBaseCode(version);
+  const maximumCode = baseCode + 99;
+  if (code < baseCode || code > maximumCode) {
+    throw new Error(`El código ${code} no pertenece al bloque de ${version} (${baseCode}-${maximumCode}).`);
   }
 }
 
@@ -171,10 +181,12 @@ function readBaselines(projectRoot, options) {
 function validateState(state, baselines) {
   const errors = [];
   const warnings = [];
+  let packageVersionIsValid = true;
 
   try {
     parseVersion(state.packageVersion);
   } catch (error) {
+    packageVersionIsValid = false;
     errors.push(error.message);
   }
 
@@ -191,6 +203,9 @@ function validateState(state, baselines) {
   for (const [label, code] of [['Android versionCode', state.androidCode], ['iOS buildNumber', state.iosBuild]]) {
     try {
       assertStoreCode(code);
+      if (packageVersionIsValid) {
+        assertCodeInVersionBlock(state.packageVersion, code);
+      }
     } catch (error) {
       errors.push(`${label}: ${error.message}`);
     }
@@ -375,7 +390,7 @@ export async function runCli(args = process.argv.slice(2)) {
       ? state.packageVersion
       : incrementVersion(state.packageVersion, bumpType);
     const nextCode = bumpType === 'hotfix'
-      ? calculateNextHotfixCode(referenceCodes)
+      ? calculateNextHotfixCode(state.packageVersion, referenceCodes)
       : calculateNextReleaseCode(nextVersion, referenceCodes);
 
     writeVersionChanges(project, nextVersion, nextCode);

@@ -48,9 +48,13 @@ test('limita cada componente SemVer a un dígito', () => {
 });
 
 test('reserva 99 códigos de build y hotfix', () => {
-  assert.equal(calculateNextHotfixCode([200100500]), 200100501);
-  assert.equal(calculateNextHotfixCode([200100598]), 200100599);
-  assert.throws(() => calculateNextHotfixCode([200100599]), /No quedan códigos/);
+  assert.equal(calculateNextHotfixCode('2.1.5', [200100500]), 200100501);
+  assert.equal(calculateNextHotfixCode('2.1.5', [200100598]), 200100599);
+  assert.throws(() => calculateNextHotfixCode('2.1.5', [200100599]), /No quedan códigos/);
+  assert.throws(
+    () => calculateNextHotfixCode('2.1.5', [200100500, 200100600]),
+    /no pertenece al bloque de 2\.1\.5/
+  );
 });
 
 test('mantiene correlación estricta frente a códigos previos', () => {
@@ -98,6 +102,16 @@ test('check valida coherencia y baselines publicados', t => {
   const invalid = runCli(projectRoot, 'check', '--android-baseline', '200100500');
   assert.equal(invalid.status, 1);
   assert.match(invalid.stderr, /debe ser mayor que el publicado/);
+
+  const trapezePath = path.join(projectRoot, 'trapeze.config.yaml');
+  const trapeze = YAML.parse(fs.readFileSync(trapezePath, 'utf8'));
+  trapeze.platforms.android.versionCode = 200100600;
+  trapeze.platforms.ios.buildNumber = 200100600;
+  fs.writeFileSync(trapezePath, YAML.stringify(trapeze));
+
+  const wrongVersionBlock = runCli(projectRoot, 'check');
+  assert.equal(wrongVersionBlock.status, 1);
+  assert.match(wrongVersionBlock.stderr, /no pertenece al bloque de 2\.1\.5/);
 });
 
 test('bump patch actualiza package y YAML preservando comentarios', t => {
@@ -116,6 +130,26 @@ test('bump patch actualiza package y YAML preservando comentarios', t => {
   assert.equal(trapeze.platforms.ios.version, '2.1.6');
   assert.equal(trapeze.platforms.ios.buildNumber, 200100600);
   assert.match(trapezeContent, /# configuración conservada/);
+});
+
+test('bump hotfix rechaza baselines de otro bloque sin modificar archivos', t => {
+  const projectRoot = createProject();
+  t.after(() => fs.rmSync(projectRoot, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(projectRoot, 'ionic-version.config.yaml'),
+    'android:\n  lastPublishedCode: 200100600\nios:\n  lastPublishedBuild: 200100600\n'
+  );
+
+  const packagePath = path.join(projectRoot, 'package.json');
+  const trapezePath = path.join(projectRoot, 'trapeze.config.yaml');
+  const packageBefore = fs.readFileSync(packagePath, 'utf8');
+  const trapezeBefore = fs.readFileSync(trapezePath, 'utf8');
+
+  const result = runCli(projectRoot, 'bump', 'hotfix');
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /no pertenece al bloque de 2\.1\.5/);
+  assert.equal(fs.readFileSync(packagePath, 'utf8'), packageBefore);
+  assert.equal(fs.readFileSync(trapezePath, 'utf8'), trapezeBefore);
 });
 
 test('info ejecuta el flujo real de lectura', t => {
