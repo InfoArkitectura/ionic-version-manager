@@ -6,9 +6,9 @@ platforms:
   android:
     # Configuración de versiones Android
     versionName: 1.0.0
-    versionCode: 100000
+    versionCode: 100000000
 
   ios:
     # Configuración de versiones iOS (igual que Android)
     version: 1.0.0
-    buildNumber: 100000
+    buildNumber: 100000000

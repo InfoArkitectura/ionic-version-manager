@@ -1,0 +1,6 @@
+# Últimos códigos aceptados por las tiendas.
+# La CLI exige que la siguiente actualización use valores superiores.
+android:
+  lastPublishedCode: null
+ios:
+  lastPublishedBuild: null
