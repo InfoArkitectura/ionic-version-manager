@@ -1,179 +1,144 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import test from 'node:test';
+import YAML from 'yaml';
+import {
+  calculateBaseCode,
+  calculateNextHotfixCode,
+  calculateNextReleaseCode,
+  incrementVersion
+} from '../scripts/cli.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const repositoryRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const cliPath = path.join(repositoryRoot, 'scripts', 'cli.js');
 
-/**
- * Tests para ionic-version-manager
- * Verifica funcionalidades principales del sistema de versionado
- */
-
-let testsRun = 0;
-let testsPassed = 0;
-let testsFailed = 0;
-
-function runTest(testName, testFunction) {
-  testsRun++;
-  console.log(`🧪 ${testName}...`);
-  
-  try {
-    testFunction();
-    testsPassed++;
-    console.log(`✅ ${testName} - PASÓ`);
-  } catch (error) {
-    testsFailed++;
-    console.log(`❌ ${testName} - FALLÓ: ${error.message}`);
-  }
-  console.log('');
+function createProject(version = '2.1.5', code = 200100500) {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ionic-version-manager-'));
+  fs.writeFileSync(
+    path.join(projectRoot, 'package.json'),
+    `${JSON.stringify({ name: 'test-ionic-app', version, scripts: {} }, null, 2)}\n`
+  );
+  fs.writeFileSync(
+    path.join(projectRoot, 'trapeze.config.yaml'),
+    `# configuración conservada\nplatforms:\n  android:\n    versionName: ${version}\n    versionCode: ${code}\n  ios:\n    version: ${version}\n    buildNumber: ${code}\n`
+  );
+  return projectRoot;
 }
 
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
+function runCli(projectRoot, ...args) {
+  return spawnSync(process.execPath, [cliPath, ...args, '--cwd', projectRoot], {
+    encoding: 'utf8'
+  });
 }
 
-// Test 1: Verificar que existen los archivos principales
-runTest('Archivos principales existen', () => {
-  const scriptsPath = path.join(__dirname, '../scripts/update-version.js');
-  const templatePath = path.join(__dirname, '../templates/trapeze.config.yaml');
-  const installPath = path.join(__dirname, '../scripts/install-in-project.js');
-  
-  assert(fs.existsSync(scriptsPath), 'update-version.js no existe');
-  assert(fs.existsSync(templatePath), 'trapeze.config.yaml template no existe');
-  assert(fs.existsSync(installPath), 'install-in-project.js no existe');
+test('genera códigos correlacionados con tres posiciones por componente', () => {
+  assert.equal(calculateBaseCode('2.0.0'), 200000000);
+  assert.equal(calculateBaseCode('2.1.5'), 200100500);
+  assert.equal(calculateBaseCode('9.9.9'), 900900900);
 });
 
-// Test 2: Verificar package.json válido
-runTest('package.json es válido', () => {
-  const packagePath = path.join(__dirname, '../package.json');
-  assert(fs.existsSync(packagePath), 'package.json no existe');
-  
-  const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
-  assert(packageJson.name === 'ionic-version-manager', 'Nombre incorrecto en package.json');
-  assert(packageJson.scripts['version:info'], 'Script version:info no existe');
-  assert(packageJson.scripts['version:patch'], 'Script version:patch no existe');
+test('limita cada componente SemVer a un dígito', () => {
+  assert.equal(incrementVersion('2.1.5', 'patch'), '2.1.6');
+  assert.throws(() => incrementVersion('2.1.9', 'patch'), /fuera de rango/);
+  assert.throws(() => incrementVersion('2.9.0', 'minor'), /fuera de rango/);
+  assert.throws(() => incrementVersion('9.0.0', 'major'), /fuera de rango/);
 });
 
-// Test 3: Verificar funciones de incremento de versión
-runTest('Función incrementVersion', () => {
-  // Simular la función (simplificada para el test)
-  function incrementVersion(version, type = 'patch') {
-    const parts = version.split('.').map(num => parseInt(num));
-    
-    switch(type) {
-      case 'major':
-        parts[0]++;
-        parts[1] = 0;
-        parts[2] = 0;
-        break;
-      case 'minor':
-        parts[1]++;
-        parts[2] = 0;
-        break;
-      case 'patch':
-      default:
-        parts[2]++;
-        break;
-    }
-    
-    return parts.join('.');
-  }
-  
-  assert(incrementVersion('1.0.0', 'patch') === '1.0.1', 'Incremento patch incorrecto');
-  assert(incrementVersion('1.0.5', 'minor') === '1.1.0', 'Incremento minor incorrecto');
-  assert(incrementVersion('1.5.3', 'major') === '2.0.0', 'Incremento major incorrecto');
+test('reserva 99 códigos de build y hotfix', () => {
+  assert.equal(calculateNextHotfixCode([200100500]), 200100501);
+  assert.equal(calculateNextHotfixCode([200100598]), 200100599);
+  assert.throws(() => calculateNextHotfixCode([200100599]), /No quedan códigos/);
 });
 
-// Test 4: Verificar función generateVersionCode
-runTest('Función generateVersionCode', () => {
-  function generateVersionCode(version) {
-    const parts = version.split('.');
-    let code = '';
-    
-    for (const part of parts) {
-      // Cada parte del código tiene un dígito más que la versión (añadir un 0)
-      const paddedValue = part + '0';
-      code += paddedValue;
-    }
-    
-    return parseInt(code);
-  }
-  
-  assert(generateVersionCode('1.0.0') === 100000, 'VersionCode 1.0.0 incorrecto');
-  assert(generateVersionCode('2.1.5') === 201050, 'VersionCode 2.1.5 incorrecto');
-  assert(generateVersionCode('10.15.25') === 100150250, 'VersionCode 10.15.25 incorrecto');
+test('mantiene correlación estricta frente a códigos previos', () => {
+  assert.equal(calculateNextReleaseCode('2.1.6', [200100599]), 200100600);
+  assert.throws(
+    () => calculateNextReleaseCode('2.1.6', [200100700]),
+    /no supera el código existente\/publicado/
+  );
 });
 
-// Test 5: Verificar que Android e iOS usan la misma versión
-runTest('Android e iOS misma versión', () => {
-  // Ya no hay función generateIOSVersion, ambas plataformas usan la misma versión
-  const version = '2.1.5';
-  const androidVersion = version;  // 2.1.5
-  const iosVersion = version;      // 2.1.5 (NO 20.1.5)
-  
-  assert(androidVersion === iosVersion, 'Android e iOS deben tener la misma versión');
-  assert(iosVersion === '2.1.5', 'iOS debe usar la versión original sin modificar');
+test('init configura scripts y Trapeze sin sobrescribir scripts existentes', t => {
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ionic-version-manager-init-'));
+  t.after(() => fs.rmSync(projectRoot, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(projectRoot, 'package.json'),
+    `${JSON.stringify({ name: 'test-app', version: '1.2.3', scripts: { 'version:info': 'custom-command' } }, null, 2)}\n`
+  );
+
+  const result = runCli(projectRoot, 'init');
+  assert.equal(result.status, 0, result.stderr);
+
+  const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
+  const trapeze = YAML.parse(fs.readFileSync(path.join(projectRoot, 'trapeze.config.yaml'), 'utf8'));
+  const config = YAML.parse(fs.readFileSync(path.join(projectRoot, 'ionic-version.config.yaml'), 'utf8'));
+  assert.equal(packageJson.scripts['version:info'], 'custom-command');
+  assert.equal(packageJson.scripts['version:patch'], 'ionic-version bump patch');
+  assert.equal(trapeze.platforms.android.versionCode, 100200300);
+  assert.equal(trapeze.platforms.ios.buildNumber, 100200300);
+  assert.equal(config.android.lastPublishedCode, null);
+  assert.equal(config.ios.lastPublishedBuild, null);
 });
 
-// Test 6: Verificar template de trapeze.config.yaml
-runTest('Template trapeze.config.yaml es válido', () => {
-  const templatePath = path.join(__dirname, '../templates/trapeze.config.yaml');
-  const templateContent = fs.readFileSync(templatePath, 'utf8');
-  
-  assert(templateContent.includes('versionName:'), 'Template no contiene versionName');
-  assert(templateContent.includes('versionCode:'), 'Template no contiene versionCode');
-  assert(templateContent.includes('version:'), 'Template no contiene version iOS');
-  assert(templateContent.includes('buildNumber:'), 'Template no contiene buildNumber');
-  assert(templateContent.includes('platforms:'), 'Template no contiene platforms');
+test('check valida coherencia y baselines publicados', t => {
+  const projectRoot = createProject();
+  t.after(() => fs.rmSync(projectRoot, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(projectRoot, 'ionic-version.config.yaml'),
+    'android:\n  lastPublishedCode: 200100499\nios:\n  lastPublishedBuild: 200100499\n'
+  );
+
+  const valid = runCli(projectRoot, 'check');
+  assert.equal(valid.status, 0, valid.stderr);
+  assert.match(valid.stdout, /READY/);
+
+  const invalid = runCli(projectRoot, 'check', '--android-baseline', '200100500');
+  assert.equal(invalid.status, 1);
+  assert.match(invalid.stderr, /debe ser mayor que el publicado/);
 });
 
-// Test 7: Verificar estructura de archivos
-runTest('Estructura de archivos correcta', () => {
-  const requiredFiles = [
-    'package.json',
-    'scripts/update-version.js',
-    'scripts/install-in-project.js', 
-    'templates/trapeze.config.yaml',
-    'test/test-version-manager.js',
-    '.github/copilot-instructions.md'
-  ];
-  
-  const rootDir = path.join(__dirname, '..');
-  
-  for (const file of requiredFiles) {
-    const filePath = path.join(rootDir, file);
-    assert(fs.existsSync(filePath), `Archivo requerido no existe: ${file}`);
-  }
+test('bump patch actualiza package y YAML preservando comentarios', t => {
+  const projectRoot = createProject('2.1.5', 200100599);
+  t.after(() => fs.rmSync(projectRoot, { recursive: true, force: true }));
+
+  const result = runCli(projectRoot, 'bump', 'patch');
+  assert.equal(result.status, 0, result.stderr);
+
+  const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
+  const trapezeContent = fs.readFileSync(path.join(projectRoot, 'trapeze.config.yaml'), 'utf8');
+  const trapeze = YAML.parse(trapezeContent);
+  assert.equal(packageJson.version, '2.1.6');
+  assert.equal(trapeze.platforms.android.versionName, '2.1.6');
+  assert.equal(trapeze.platforms.android.versionCode, 200100600);
+  assert.equal(trapeze.platforms.ios.version, '2.1.6');
+  assert.equal(trapeze.platforms.ios.buildNumber, 200100600);
+  assert.match(trapezeContent, /# configuración conservada/);
 });
 
-// Test 8: Verificar función incrementVersionCode (hotfix)
-runTest('Función incrementVersionCode', () => {
-  function incrementVersionCode(currentVersionCode) {
-    return currentVersionCode + 1;
-  }
-  
-  assert(incrementVersionCode(100000) === 100001, 'Incremento de versionCode desde 100000 incorrecto');
-  assert(incrementVersionCode(101010) === 101011, 'Incremento de versionCode desde 101010 incorrecto');
-  assert(incrementVersionCode(201050) === 201051, 'Incremento de versionCode desde 201050 incorrecto');
-  assert(incrementVersionCode(100150250) === 100150251, 'Incremento de versionCode desde 100150250 incorrecto');
+test('info ejecuta el flujo real de lectura', t => {
+  const projectRoot = createProject();
+  t.after(() => fs.rmSync(projectRoot, { recursive: true, force: true }));
+
+  const result = runCli(projectRoot, 'info');
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Android: 2.1.5 \(versionCode: 200100500\)/);
+  assert.match(result.stdout, /iOS: 2.1.5 \(buildNumber: 200100500\)/);
 });
 
-// Mostrar resumen final
-console.log('🏁 RESUMEN DE TESTS');
-console.log('==================');
-console.log(`📊 Tests ejecutados: ${testsRun}`);
-console.log(`✅ Tests pasados: ${testsPassed}`);
-console.log(`❌ Tests fallidos: ${testsFailed}`);
-console.log(`📈 Porcentaje de éxito: ${Math.round((testsPassed / testsRun) * 100)}%`);
+test('arranca mediante un symlink equivalente a node_modules/.bin', {
+  skip: process.platform === 'win32'
+}, t => {
+  const projectRoot = createProject();
+  const binRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ionic-version-bin-'));
+  const binPath = path.join(binRoot, 'ionic-version');
+  t.after(() => fs.rmSync(projectRoot, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(binRoot, { recursive: true, force: true }));
+  fs.symlinkSync(cliPath, binPath);
 
-if (testsFailed === 0) {
-  console.log('');
-  console.log('🎉 ¡Todos los tests pasaron! ionic-version-manager está listo para usar.');
-} else {
-  console.log('');
-  console.log('⚠️  Algunos tests fallaron. Revisa los errores arriba.');
-  process.exit(1);
-}
+  const result = spawnSync(binPath, ['info', '--cwd', projectRoot], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Versión del proyecto: 2.1.5/);
+});
